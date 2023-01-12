@@ -25,6 +25,9 @@ export interface RequestOptions {
   withToken?: boolean
   // 请求重试机制
   retryRequest?: RetryRequest
+  // 是否是restful接口
+  restful?: boolean
+  onlyResults?: boolean
 }
 
 export interface RetryRequest {
@@ -37,6 +40,16 @@ export interface Result<T = any> {
   type: 'success' | 'error' | 'warning'
   message: string
   result: T
+}
+
+export interface RestfulResult<T = any> {
+  count?: number
+  next?: null | string
+  previous?: null | string
+  page?: number
+  pages?: number
+  results?: T
+  details?: T
 }
 
 // multipart/form-data: upload file

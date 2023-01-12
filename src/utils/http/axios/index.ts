@@ -3,7 +3,7 @@
 
 import type { AxiosResponse } from 'axios'
 import { clone } from 'lodash-es'
-import type { RequestOptions, Result } from '/#/axios'
+import type { RequestOptions, Result, RestfulResult } from '/#/axios'
 import type { AxiosTransform, CreateAxiosOptions } from './axiosTransform'
 import { VAxios } from './Axios'
 import { checkStatus } from './checkStatus'
@@ -17,6 +17,7 @@ import { useI18n } from '/@/hooks/web/useI18n'
 import { joinTimestamp, formatRequestDate } from './helper'
 import { useUserStoreWithOut } from '/@/store/modules/user'
 import { AxiosRetry } from '/@/utils/http/axios/axiosRetry'
+import Cookies from 'js-cookie'
 
 const globSetting = useGlobSetting()
 const urlPrefix = globSetting.urlPrefix
@@ -149,6 +150,7 @@ const transform: AxiosTransform = {
         ? `${options.authenticationScheme} ${token}`
         : token
     }
+    ;(config as Recordable).headers['X-CSRFToken'] = Cookies.get('csrftoken')
     return config
   },
 
@@ -203,6 +205,65 @@ const transform: AxiosTransform = {
   },
 }
 
+const restfulTransform: AxiosTransform = clone(transform)
+restfulTransform.transformResponseHook = (
+  res: AxiosResponse<RestfulResult>,
+  options: RequestOptions,
+) => {
+  const { t } = useI18n()
+  const { isTransformResponse, isReturnNativeResponse, onlyResults } = options
+  // 是否返回原生响应头 比如：需要获取响应头时使用该属性
+  if (isReturnNativeResponse) {
+    return res
+  }
+  // 不进行任何处理，直接返回
+  // 用于页面代码可能需要直接获取code，data，message这些信息时开启
+  if (!isTransformResponse) {
+    return res.data
+  }
+  // 错误的时候返回
+
+  const { data } = res
+  if (!data) {
+    // return '[HTTP] Request has no return value';
+    throw new Error(t('sys.api.apiRequestFailed'))
+  }
+  //  这里 code，result，message为 后台统一的字段，需要在 types.ts内修改为项目自己的接口返回格式
+  const { details, results } = data
+
+  // 这里逻辑可以根据项目进行修改
+  const hasSuccess = !Reflect.has(data, 'details')
+  if (hasSuccess) {
+    return onlyResults ? results : data
+  }
+
+  // 在此处根据自己项目的实际情况对不同的code执行不同的操作
+  // 如果不希望中断当前请求，请return数据，否则直接抛出异常即可
+  const timeoutMsg = details
+  // switch (code) {
+  //   case ResultEnum.TIMEOUT:
+  //     timeoutMsg = t('sys.api.timeoutMessage')
+  //     const userStore = useUserStoreWithOut()
+  //     userStore.setToken(undefined)
+  //     userStore.logout(true)
+  //     break
+  //   default:
+  //     if (message) {
+  //       timeoutMsg = message
+  //     }
+  // }
+
+  // errorMessageMode=‘modal’的时候会显示modal错误弹窗，而不是消息提示，用于一些比较重要的错误
+  // errorMessageMode='none' 一般是调用时明确表示不希望自动弹出错误提示
+  if (options.errorMessageMode === 'modal') {
+    createErrorModal({ title: t('sys.api.errorTip'), content: timeoutMsg })
+  } else if (options.errorMessageMode === 'message') {
+    createMessage.error(timeoutMsg)
+  }
+
+  throw new Error(timeoutMsg || t('sys.api.apiRequestFailed'))
+}
+
 function createAxios(opt?: Partial<CreateAxiosOptions>) {
   return new VAxios(
     // 深度合并
@@ -210,8 +271,8 @@ function createAxios(opt?: Partial<CreateAxiosOptions>) {
       {
         // See https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication#authentication_schemes
         // authentication schemes，e.g: Bearer
-        // authenticationScheme: 'Bearer',
-        authenticationScheme: '',
+        authenticationScheme: 'Bearer',
+        // authenticationScheme: '',
         timeout: 10 * 1000,
         // 基础接口地址
         // baseURL: globSetting.apiUrl,
@@ -220,7 +281,7 @@ function createAxios(opt?: Partial<CreateAxiosOptions>) {
         // 如果是form-data格式
         // headers: { 'Content-Type': ContentTypeEnum.FORM_URLENCODED },
         // 数据处理方式
-        transform: clone(transform),
+        transform: opt?.requestOptions?.restful ? clone(restfulTransform) : clone(transform),
         // 配置项，下面的选项都可以在独立的接口请求中覆盖
         requestOptions: {
           // 默认将prefix 添加到url

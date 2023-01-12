@@ -2,7 +2,7 @@
  * Data processing class, can be configured according to the project
  */
 import type { AxiosRequestConfig, AxiosResponse } from 'axios'
-import type { RequestOptions, Result } from '/#/axios'
+import type { RequestOptions, Result, RestfulResult } from '/#/axios'
 
 export interface CreateAxiosOptions extends AxiosRequestConfig {
   authenticationScheme?: string
@@ -20,7 +20,10 @@ export abstract class AxiosTransform {
   /**
    * @description: 处理响应数据
    */
-  transformResponseHook?: (res: AxiosResponse<Result>, options: RequestOptions) => any
+  transformResponseHook?: (
+    res: AxiosResponse<Result | RestfulResult>,
+    options: RequestOptions,
+  ) => any
 
   /**
    * @description: 请求失败处理
